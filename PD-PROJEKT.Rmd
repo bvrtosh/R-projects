@@ -1,0 +1,1755 @@
+---
+title: "PROJEKT - PRZYGOTOWANIE DANYCH"
+author: "Bartosz Deptuła"
+date: "2024-06-21"
+output: html_document
+---
+
+##### WCZYTANIE DANYCH #####
+```{r}
+dane <- read.csv("recipeData.csv")
+```
+
+##### WCZYTANIE BIBLIOTEK #####
+```{r}
+install.packages("VIM")
+library(dplyr)
+library(ggplot2)
+library(car)
+library(VIM)
+library(readxl)
+install.packages("stringr")
+library(stringr)
+install.packages("outliers")
+library(outliers)
+install.packages("sampling")
+library(sampling) 
+install.packages("TeachingSampling")
+library(TeachingSampling)
+```
+
+##### CEL BADANIA #####
+
+Celem niniejszego badania jest przeprowadzenie kompleksowej analizy danych dotyczących procesu produkcji piwa, w celu zrozumienia zależności między różnymi zmiennymi oraz identyfikacji istotnych czynników wpływających na jakość piwa. Badanie skupia się na przygotowaniu danych wstępnych, w tym imputacji brakujących danych, identyfikacji i potencjalnym usunięciu wartości odstających oraz ocenie korelacji między zmiennymi.
+
+##### OPIS ZMIENNYCH #####
+
+
+#1.Beer ID
+Opis: Identyfikator, każdego piwa z bazy danych
+
+Skala Pomiarowa: Nominalna
+
+Jednostka Pomiarowa: -
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$BeerID)
+sum(is.na(dane$BeerID))
+length(unique(dane$BeerID))
+```
+
+- 73861 unikalnych ID.
+- 0 braków danych
+- wartości liczbowe
+Pozostałe statystyki nie mają większego znaczenia i sensu.
+
+Wizualizacja: -
+(Tworzenie wizualizacji dla zmiennej, w której każda obserwacja jest unikalna jest zbędne, ponieważ nie dostarcza ona wartościowych informacji na temat rozkładu danych ani zależności między nimi.)
+
+
+#2.Name
+Opis: Nazwa każdego piwa z bazy danych
+
+Skala Pomiarowa: Nominalna
+
+Jednostka Pomiarowa: -
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$Name)
+x<- sum(grepl("N/A", dane$Name, fixed = TRUE)) #braki w tekstowych wartościach
+x
+length(unique(dane$Name))
+```
+
+- wartości tekstowe
+- 1 brak (pojawia się 2, a przy imputacji jest juz tylko jeden brak)
+- 59149 unikalnych nazw piw
+
+Wizualizacja: -
+(Tworzenie wizualizacji dla zmiennej, w której większość obserwacji jest unikalna jest zbędne, ponieważ nie dostarcza ona wartościowych informacji na temat rozkładu danych ani zależności między nimi.)
+
+#3.URL
+Opis: Adres URL strony z przepisem na dane piwo
+
+Skala Pomiarowa: Nominalna
+
+Jednostka Pomiarowa: -
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$URL)
+length(unique(dane$URL))
+x<- sum(grepl("N/A", dane$URL, fixed = TRUE)) #braki w tekstowych wartościach
+x
+```
+- wartości tekstowe
+- 0 braków
+- 73861 unikalnych adresów URL
+
+Wizualizacja: -
+(Tworzenie wizualizacji dla zmiennej, w której każda obserwacja jest unikalna jest zbędne, ponieważ nie dostarcza ona wartościowych informacji na temat rozkładu danych ani zależności między nimi.)
+
+#4.Style
+Opis: Rodzaj piwa
+
+Skala Pomiarowa: Nominalna
+
+Jednostka Pomiarowa: -
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$Style)
+length(unique(dane$Style))
+x<- sum(grepl("N/A", dane$Style, fixed = TRUE)) #braki w tekstowych wartościach
+x
+```
+
+- wartości tekstowe
+- 596 braków
+- 175 unikalnych stylów piwa
+
+Wizualizacja:
+```{r}
+ggplot(dane, aes(x = Style)) +
+  geom_bar() +
+  theme(axis.text.x = element_blank(),
+        plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Liczebność rodzajów piwa", x = "Rodzaj piwa", y = "Liczebność danego rodzaju")
+```
+Na wizualizacji można zauważyć, że 2 rodzaje piwa znacznie przeważają liczebnością nad pozostałymi.
+
+#5.Style ID
+Opis: Identyfikator danego rodzaju piwa
+
+Skala Pomiarowa: Nominalna
+
+Jednostka Pomiarowa: -
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$StyleID)
+sum(is.na(dane$StyleID))
+length(unique(dane$StyleID))
+```
+- 25% wszystkich piw z bazy danych należy do 10 najpopularniejszych rodzajów
+- 75% wszystkich piw należy do 111 najpopularniejszych rodzajów
+- 0 braków
+- liczba unikatów zgadza się co do poprzedniej zmiennej, co daje informacje że na tej płaszczyźnie nie występują nieprawidłowości
+
+Wizualizacja: -
+Charakter zmiennej identyczny jak w poprzedniej, z tego powodu pomijamy wizualizacje.
+
+#6.Size (L)
+Opis: Objętość uważonego piwa według przepisu
+
+Skala Pomiarowa: Ilorazowa
+
+Jednostka Pomiarowa: Litry (L)
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$Size.L.)
+sum(is.na(dane$Size.L.))
+length(unique(dane$Size.L.))
+```
+- Najmniejsza objętość uważonego piwa z przepisu wynosi 1 litr
+- Największa objętość uważonego piwa z przepisu wynosi 9200 litrów
+- 25% wszystkich przepisów jest na mniejszą lub równą objętość piwa niż 18,93 litrów
+- 75% wszystkich przepisów jest na mniejszą lub równą objętość piwa niż 23,66 litrów
+- 0 braków danych
+- 1065 unikalnych objętości w bazie danych
+
+Wizualizacja:
+```{r}
+dane_filtered <- dane %>% filter(Size.L. < 100)
+ggplot(dane_filtered, aes(x = Size.L.)) +
+  geom_histogram(binwidth = 5, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Objętości uważonych piw według przepisu (od 0 do 100 L)", 
+       x = "Objętość piwa (L)", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+Ze względu na małą ilość przepisów powyżej 100L zdecydowano się na pominięcie ich w wizualizacji.
+Z wykresu można odczytać, że większość przepisów jest na ok 20L piwa.
+
+#7.OG
+Opis: Miara gęstości brzeczki przed rozpoczęciem fermentacji piwa.
+
+Skala Pomiarowa: Ilorazowa
+
+Jednostka Pomiarowa: °P (Gęstość w skali Plato) / Gęstość względem wody
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$OG)
+sum(is.na(dane$OG))
+length(unique(dane$OG))
+```
+- Najniższa wartość OG wynosi 1 °P
+- Najwyższa wartość OG wynosi 34.035 °P
+- 75% wszystkich przepisów zawierają mniej lub równają się 1.069 °P OG
+- 0 braków danych
+- 2036 unikatowych gęstości
+- Przeciętny przepis ma gęstość brzeczki około 1.058
+- Średnia gęstość brzeczki ze wszystkich przepisów jest równa 1.406
+
+Wizualizacja:
+```{r}
+dane_filtered <- dane %>% filter(OG < 1.5)
+
+ggplot(dane_filtered, aes(x = OG)) +
+  geom_histogram(breaks = seq(1, 1.5, by = 0.01), fill = "white", color = "black", alpha = 1) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Występowanie różnych gęstości początkowych w przepisach (od 1 do 1.5 °P)", 
+       x = "Gęstość brzeczki (OG)", y = "Liczba przepisów")
+
+dane_filtered <- dane %>% filter(OG < 5)
+
+ggplot(dane_filtered, aes(x = OG)) +
+  geom_histogram(breaks = seq(1.5, 5, by = 0.05), fill = "white", color = "black", alpha = 1) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Występowanie różnych gęstości początkowych w przepisach (od 1.5 do 5 °P)", 
+       x = "Gęstość brzeczki (OG)", y = "Liczba przepisów")
+
+dane_filtered <- dane %>% filter(OG > 5)
+
+ggplot(dane_filtered, aes(x = OG)) +
+  geom_histogram(breaks = seq(5, 35, by = 1), fill = "white", color = "black", alpha = 1) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Występowanie różnych gęstości początkowych w przepisach (od 5 do 35 °P)", 
+       x = "Gęstość brzeczki (OG)", y = "Liczba przepisów")
+```
+Za pomocą 3 wykresów przedstawiono rozkład występujących gęstości brzeczki w przepisach. Łatwo zauwazyć, że najwięcej przepisów występuje w przedziale od 1 do 1.2 wartości OG. Następnie widzimy znaczny spadek obserwacji, po czym na 3 wykresie wzrost liczby przepisów w przedziale od 5 do 35 warości OG. Powodem jest prawdopodobnie występowanie różnych miar gęstości w przepisach, niektóre są opisane miarą w skali Plato, a inne gęstością względem wody.
+
+#8.FG
+Opis: Miara gęstości brzeczki po zakończonej fermentacji piwa.
+
+Skala Pomiarowa: Ilorazowa
+
+Jednostka Pomiarowa: °P (Gęstość w skali Plato) / Gęstość względem wody
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$FG)
+sum(is.na(dane$FG))
+length(unique(dane$FG))
+```
+- Najniższa wartość FG wynosi -0.003 °P
+- Najwyższa wartość FG wynosi 23.425 °P
+- 75% wszystkich przepisów zawierają mniej lub równają się 1.017 °P OG
+- 0 braków danych
+- 1958 unikatowych gęstości
+- Przeciętny przepis ma gęstość brzeczki około 1.013
+- Średnia gęstość brzeczki ze wszystkich przepisów jest równa 1.076
+
+Wizualizacja:
+```{r}
+dane_filtered <- dane %>% filter(FG < 1.5)
+
+ggplot(dane_filtered, aes(x = FG)) +
+  geom_histogram(breaks = seq(0.95, 1.05, by = 0.001), fill = "white", color = "black", alpha = 1) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Występowanie różnych gęstości początkowych w przepisach (od 1 do 1.5 °P)", 
+       x = "Gęstość brzeczki (OG)", y = "Liczba przepisów")
+
+dane_filtered <- dane %>% filter(FG < 5)
+
+ggplot(dane_filtered, aes(x = FG)) +
+  geom_histogram(breaks = seq(1.05, 5, by = 0.05), fill = "white", color = "black", alpha = 1) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Występowanie różnych gęstości początkowych w przepisach (od 1.5 do 5 °P)", 
+       x = "Gęstość brzeczki (OG)", y = "Liczba przepisów")
+
+dane_filtered <- dane %>% filter(FG > 5)
+
+ggplot(dane_filtered, aes(x = FG)) +
+  geom_histogram(breaks = seq(5, 25, by = 0.5), fill = "white", color = "black", alpha = 1) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Występowanie różnych gęstości początkowych w przepisach (od 5 do 35 °P)", 
+       x = "Gęstość brzeczki (OG)", y = "Liczba przepisów")
+```
+Na podstawie wizualizacji można zauważyć ze większość obserwacji znajduje się w okolicach FG = 1.01, niewielka część obserwacji występuje także w przedziale od 1.05 do 10, z czego najwięcej w okolicy FG = 3. Powodem jest prawdopodobnie występowanie różnych miar gęstości w przepisach, niektóre są opisane miarą w skali Plato, a inne gęstością względem wody. Obserwacje poniżej 0.95 zostały pominięte, gdyż zostały uznane za nieistotne ze względu na ich małą ilość (6).
+
+#9.ABV
+Opis: Alkohol objętościowo
+
+Skala Pomiarowa: Ilorazowa
+
+Jednostka Pomiarowa: Procent (%)
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$ABV)
+sum(is.na(dane$ABV))
+length(unique(dane$ABV))
+```
+
+- 25% wszystkich rekordów zawiera przepisy z ilością alkoholu równą bądź mniejszą niż 5.080%
+- 75% wszystkich rekordów zawiera przepisy z ilością alkoholu równą bądź mniejszą niż 6.830%
+- 0% to najmniejsza zawartość alkoholu w piwie z przepisu z bazy danych
+- 54,72% to największa zawartość alkoholu w piwie z bazy danych (dość niespotykana wartość - może być błędna)
+- Średnia zawartość alkoholu w piwach wynosi 6.137%
+- Typowa zawartość alkoholu w piwach wynosi 5.790 %
+- 0 braków danych
+- 1502 unikalnych wartości
+
+Wizualizacja:
+
+```{r}
+dane_filtered <- dane %>% filter(ABV < 15)
+
+ggplot(dane_filtered, aes(x = ABV)) +
+  geom_histogram(breaks = seq(1, 15, by = 0.5), fill = "white", color = "black", alpha = 1) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Rozkład zawartości alkoholu w piwach w zależności od liczby przepisów (do 15%)", 
+       x = "Zawartość alkoholu [%]", y = "Liczba przepisów")
+
+dane_filtered <- dane %>% filter(ABV > 10)
+
+ggplot(dane_filtered, aes(x = ABV)) +
+  geom_histogram(breaks = seq(15, 55, by = 0.5), fill = "white", color = "black", alpha = 1) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Rozkład zawartości alkoholu w piwach w zależności od liczby przepisów (od 15 do 55%)", 
+       x = "Zawartość alkoholu [%]", y = "Liczba przepisów")
+
+```
+Na podstawie wykresów możemy zaobserwować, że większość przepisów zawiera ok od 4-8% alkoholu. Na drugiej wizualizacji możemy zobserwować ze występuje kilka obserwacji o nietypowych wartościach jednak ich rozkład jest dosyć naturalny i nie wskazuje na błąd.
+
+#10.IBU
+Opis: Stopień goryczy piwa
+
+Skala Pomiarowa: Przedziałowa
+
+Jednostka Pomiarowa: IBU
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$IBU)
+sum(is.na(dane$IBU))
+length(unique(dane$IBU))
+```
+- najlmniejsza wartość wynosi 0
+- największa wartość wynosi 3409.30
+- 75% wszystkich przepisów zawiera równo lub mniej niż 56.38 jednostek stopnia goryczy piwa.
+- średnia wartość wynosi 44,28
+- typowa zawartość wynosi 35.77
+- 0 braków danych
+- 12587 unikalnych wartości
+
+Wizualizacja:
+
+```{r}
+ggplot(dane, aes(x = IBU)) +
+  geom_histogram(binwidth = 5, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład przepisów na piwo w zależności od stopnia goryczy (od 0 do 100 IBU)", x = "Stopień goryczy piwa", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(0, 100)
+
+ggplot(dane, aes(x = IBU)) +
+  geom_histogram(binwidth = 5, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład przepisów na piwo w zależności od stopnia goryczy (od 100 do 1000 IBU)", x = "Stopień goryczy piwa", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(100, 1000)
+
+ggplot(dane, aes(x = IBU)) +
+  geom_histogram(binwidth = 5, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład przepisów na piwo w zależności od stopnia goryczy (od 1000 do 4000 IBU)", x = "Stopień goryczy piwa", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(1000, 4000)
+```
+Na wizualizacjach można zauważyć, że typowe wartości IBU mieszczą sie głównie od 0 do 250 IBU. W dalszych zakresach można zauważyć, że występują zaledwie pojedyncze obserwacje, które zapewne wynikaja z błędnego obliczenia IBU.
+
+#11.Color
+Opis: Określenie barwy piwa (od jasnego do ciemnego)
+
+Skala Pomiarowa: Przedziałowa
+
+Jednostka Pomiarowa: SRM
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$Color)
+sum(is.na(dane$Color))
+length(unique(dane$Color))
+```
+- najmniejsza wartość wynosi 0 SRM
+- największa wartość wynosi 186 SRM
+- średnia wartości wynosi 8.44 SRM
+- typowa wartość wynosi 13.40 SRM
+- 0 braków danych
+- 4729 uniklanych wartości
+
+Wizualizacja:
+```{r}
+ggplot(dane, aes(x = Color)) +
+  geom_histogram(binwidth = 1, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Barwa piwa w zależności od liczby przepisów", x = "Barwa Piwa (IBU)", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) + xlim(0, 50)
+
+
+```
+Ze względu na fakt iż skala SRM zawiera się w wartościach od 0 do 40 SRM, ustalono granice wykresu od 0 do 50 SRM. Można zauważyć, że przy 40 SRM następuje wzrost w stosunku do okolicznych wartości co jest spowodowane faktem, że jest to górna granica oznaczająca, że piwo jest czarne-nieprzejrzyste. Pozostałe wartości mogą być albo błędnie podane lub być w innej skali np. EBC.
+
+#12.Boil Size
+Opis: Objętość cieczy na początku warzenia piwa
+
+Skala Pomiarowa: Ilorazowa
+
+Jednostka Pomiarowa: Litry (L)
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$BoilSize)
+sum(is.na(dane$BoilSize))
+length(unique(dane$BoilSize))
+```
+- najmniejsza wartość to 1 litr
+- największa wartość to 9700 litrów
+- w 75% przepisów objętość cieczy wynosi mniej lub równo 30 litrów
+- średnia objętość cieczy w przepisach wynosi 49.73 litry
+- typowa objętość cieczy w przepisach wynosi 27.44 litry
+- 0 braków danych
+- 1973 unikalnych wartości
+
+Wizualizacja:
+```{r}
+ggplot(dane, aes(x = BoilSize)) +
+  geom_histogram(binwidth = 5, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład objętości cieczy na początku gotowania w zależności od liczby przepisów", x = "Objętość cieczy (litry)", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) + xlim(0, 100)
+
+ggplot(dane, aes(x = BoilSize)) +
+  geom_histogram(binwidth = 5, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład objętości cieczy na początku gotowania w zależności od liczby przepisów", x = "Objętość cieczy (litry)", y = "Liczba przepisów") +  theme(plot.title = element_text(hjust = 0.5)) + xlim(100, 1000)
+
+ggplot(dane, aes(x = BoilSize)) +
+  geom_histogram(binwidth = 5, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład objętości cieczy na początku gotowania w zależności od liczby przepisów", x = "Objętość cieczy (litry)", y = "Liczba przepisów") +  theme(plot.title = element_text(hjust = 0.5)) + xlim(1000, 10000)
+```
+Dzięki wizualizacjom, można dostrzec, że większość przepisów mieści się w zakresie od 10 do 50L. Są też przepisy na "hurtowe wartości", które raczej nie są błędnie zapisanie, jednak ze wzgledu na odbieganie od większości, prawdopodobnie zostaną usunięte.
+
+#13.Boil Time
+Opis: Czas gotowania brzeczki
+
+Skala Pomiarowa: Ilorazowa
+
+Jednostka Pomiarowa: minuty (min)
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$BoilTime)
+sum(is.na(dane$BoilTime))
+length(unique(dane$BoilTime))
+```
+- najkrótszy czas gotowania wynosi 0 minut
+- najdłuższy czas gotowania wynosi 240 minut
+- w 75% przepisów czas gotowania wynosi mniej lub równo 60 minut 
+- w 25% przepisów czas gotowania wynosi mniej lub równo 60 minut
+- średni czas gotowania brzeczki wynosi 65.07 minut
+- typowy czas gotowania brzeczki wynosi 60 minut.
+- 0 braków danych
+- 75 uniklanych wartości
+
+
+Wizualizacja:
+```{r}
+ggplot(dane, aes(x = BoilTime)) +
+  geom_histogram(binwidth = 5, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład czasu gotowania brzeczki w zależności od liczby przepisów", x = "Czas gotowania (minuty)", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(0, 100)
+
+ggplot(dane, aes(x = BoilTime)) +
+  geom_histogram(binwidth = 5, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład czasu gotowania brzeczki w zależności od liczby przepisów", x = "Czas gotowania (minuty)", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(100, 250)
+```
+Na wizualizacjach można zauważyć, że zdecydowana większość przepisów wymaga gotowania brzeczki przez około 1 godzinę. Na drugim wykresie widać, że cześć przepisów wymaga dłuższego czasu gotowania, lecz są to dosyć naturalne zakresy czasowe, także nie zostają one uznane za błąd.
+
+#14.Boil Gravity
+Opis: Gęstość brzeczki przed gotowaniem
+
+Skala Pomiarowa: Ilorazowa
+
+Jednostka Pomiarowa: -
+
+Podstawowe Statystyki:
+```{r}
+summary(as.numeric(dane$BoilGravity))
+sum(is.na(as.numeric(dane$BoilGravity)))
+length(unique(as.numeric(dane$BoilGravity)))
+```
+- najmniejsza gęstość brzeczki przed gotowaniem wynosi 0
+- największa gęstość brzeczki przed gotowaniem wynosi 52.6
+- średnia gęstość brzeczki wynosi 1.354
+- typowa gęstość brzeczki wynosi 1.047
+- dane pomimo zapisu w formie liczbowej, były zakodowane jako wartości liczbowe
+- 2990 braków danych
+- 510 unikalnych wartości
+
+Wizualizacja:
+```{r}
+ggplot(dane, aes(x = BoilGravity)) +
+  geom_bar(fill = "blue") +
+  labs(title = "Zależność występowania różnych wartości gęstości brzeczki przed gotowaniem od liczby przepisów", x = "Gęstość brzeczki przed gotowaniem", y = "Liczba przepisów") +
+  theme(axis.text.x = element_blank() , plot.title = element_text(hjust = 0.5))
+```
+Prawdopodobnie ze względu na fakt użycia w przepisach różnych skali pomiarowych, obserwujemy pojawienie się nietypowych wartości wraz ze wzrostem osi X. Prawdopodobnie większość używa gęstości wzgledem wody, a pozostałe skali Plato. 
+
+#15.Efficiency
+Opis: Wydajność ekstrakcji brzeczki piwnej - ekstrakcja cukrów ze słodu podczas zacierania
+
+Skala Pomiarowa: ilorazowa
+
+Jednostka Pomiarowa: Procenty (%)
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$Efficiency)
+sum(is.na(dane$Efficiency))
+length(unique(dane$Efficiency))
+```
+- wydajność 0% jest najmniejszą wartością wydajności ekstrakcji ze zbioru danych, ze względu na to że są to przepisy na cydry nie uznajemy tego jako błędy.
+- wydajność 100% jest największą wartością wydajności ekstrakcji ze zbioru danych
+- średnia wydajność wynosi 66,35%
+- typowa wydajność wynosi 70%
+- 0 braków danych
+- 272 unikalne wartości
+
+Wizualizacja:
+```{r}
+ggplot(dane, aes(x = Efficiency)) +
+  geom_histogram(binwidth = 5, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład wydajności ekstrakcji brzeczki w zależności od liczby przepisów", x = "Wydajność ekstrakcji brzeczki (%)", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(0, 100)
+```
+Na wykresie można zauważyć, że w okolicach 70-75% ekstrakcji brzeczki znajduje się najwięcej przepisów. Dane wyglądają dosyć naturalnie, raczej nie powinny zawierać nieprawidłowości.
+
+
+#16.MashThickness
+Opis: Ilość wody na funt ziarna
+
+Skala Pomiarowa: Ilorazowa
+
+Jednostka Pomiarowa: gal/lb
+
+Podstawowe Statystyki:
+```{r}
+summary(as.numeric(dane$MashThickness))
+sum(is.na(as.numeric(dane$MashThickness)))
+length(unique(as.numeric(dane$MashThickness)))
+```
+- najmniejsza wartość wynosi 0 galonów wody na funt ziarna
+- największa wartość wynosi 100 galonów wody na funt ziarna
+- średnia wartość wynosi 2.127 galonów wody na funt ziarna
+- typowa wartość wynosi 1.5 galonów wody na funt ziarna
+- dane pomimo zapisu w formie liczbowej, były zakodowane jako wartości liczbowe
+- 29864 braków danych 
+- 568 uniklanych wartości
+
+Wizualizacja:
+```{r}
+ggplot(dane, aes(x = as.numeric(dane$MashThickness))) +
+  geom_histogram(binwidth = 0.1, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład ilości wody na funt ziarna w zależności od liczby przepisów", x = "Ilość wody na funt ziarna (gal/lb)", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(0, 10)
+
+ggplot(dane, aes(x = as.numeric(dane$MashThickness))) +
+  geom_histogram(binwidth = 1, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład ilości wody na funt ziarna w zależności od liczby przepisów", x = "Ilość wody na funt ziarna (gal/lb)", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(10, 100)
+```
+Ze względnu na fakt, że zazwyczaj wartości Mash Thickness znajdują się w przedziale od 0 do 5, wartości powyzej 10 mogą być błędne, gdyż prowadziłyby do bardzo rzadkich piw. Dodatkowo byłoby to bardzo niepraktyczna i nieefektywna procedura.
+
+#17.SugarScale
+Opis: Sposoby wyrażania gęstości brzeczki
+
+Skala Pomiarowa: nominalna
+
+Jednostka Pomiarowa: -
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$SugarScale)
+length(unique(dane$SugarScale))
+unique(dane$SugarScale)
+```
+- 2 unikalne wartości "Plato" i "Specific Gravity"
+- 0 braków danych 
+
+
+
+Wizualizacja:
+
+```{r}
+ggplot(dane, aes(x = SugarScale)) +
+ geom_bar(fill = "white", color = "black") +
+  labs(title = "Sposoby wyrażania gęstości brzeczki w zależności od liczby przepisów",
+       x = "Technika",
+       y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+Na wizualizacji widzimy, że "Specific Gravity" ma zdecydowaną większość. Prawdopodobnie odnosi się to do faktu z poprzedniej zmiennej "BoilGravity", gdzie część zmiennych pokazywała odmienne wartości ze względu na to, że były ukazane w skali Plato.
+
+
+#18.BrewMethod
+Opis: Technika warzenia piwa
+
+Skala Pomiarowa: Nominalna
+
+Jednostka Pomiarowa: -
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$BrewMethod)
+length(unique(dane$BrewMethod))
+unique(dane$BrewMethod)
+x<- sum(grepl("N/A", dane$BrewMethod, fixed = TRUE))
+x
+```
+- wartości tekstowe
+- 0 braków danych
+- 4 unikalne wartości:"All Grain", "extract", "BIAB", "Partial Mash".
+
+Wizualizacja:
+```{r}
+ggplot(dane, aes(x = BrewMethod)) +
+ geom_bar(fill = "white", color = "black") +
+  labs(title = "Liczba przepisów zawierających różne techniki warzenia",
+       x = "Technika warzenia",
+       y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+"All Grain" jest najpopularniejszą techniką warzenia piwa ze wszystkich, co ma swoje odzwierciedlenie w rzeczywistości, gdyż jest to standardowa metoda produkcji piwa.
+
+#19.PitchRate
+Opis: Ilość dodanych drożdży do brzeczki przed fermentacją w celu rozpoczęcia procesu fermentacji alkoholowej.
+
+Skala Pomiarowa: Ilorazowa
+
+Jednostka Pomiarowa: cells/ml/°P
+
+Podstawowe Statystyki:
+```{r}
+summary(as.numeric(dane$PitchRate))
+sum(is.na(as.numeric(dane$PitchRate)))
+length(unique(as.numeric(dane$PitchRate)))
+unique(as.numeric(dane$PitchRate))
+```
+- najmniejsza wartość jest równa 0
+- największa jest równa 2
+- średnia wartośc wynosi 0.75
+- typowa wartość wynosi 0.75
+- 39252 braki danych
+- 9 unikalnych wartości (pomijamy braki danych)
+
+Wizualizacja:
+
+```{r}
+ggplot(dane, aes(x = PitchRate)) +
+ geom_bar(fill = "white", color = "black") +
+  labs(title = "Ilość dodanych drożdży do brzeczki na liczbę przepisów",
+       x = "Ilość dodanych drożdży (cells/ml/°P)",
+       y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+Braki danych zajmują ponad połowę wszystkich obserwacji, pozostałe wariancje mają dosyć podobny rozkład jak zmienna "BoilTime".
+
+#20.PrimaryTemp
+Opis: Temperatura w fazie fermentacji
+
+Skala Pomiarowa: Przedziałowa
+
+Jednostka Pomiarowa: Stopnie Celsjusza (°C)
+
+Podstawowe Statystyki:
+```{r}
+summary(as.numeric(dane$PrimaryTemp))
+sum(is.na(as.numeric(dane$PrimaryTemp)))
+length(unique(as.numeric(dane$PrimaryTemp)))
+```
+- najniższa temperatura w fazie fermentacji wynosi -17.78 °C
+- najwyższa temperatura w fazie fermentacji wynosi 114 °C
+- średnia temperatura w fazie fermentacji wynosi 19.18 °C
+- typowa temperatura w fazie fermentacji wynosi 20 °C
+- 75% przepisów ma temperatura w fazie fermentacji niższą bądź równa 20 °C
+- 22662 braki danych
+
+
+Wizualizacja:
+```{r}
+ggplot(dane, aes(x = as.numeric(PrimaryTemp))) +
+  geom_histogram(binwidth = 1, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład ilości wody na funt ziarna w zależności od liczby przepisów", x = "Ilość wody na funt ziarna (gal/lb)", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(0, 50)
+
+ggplot(dane, aes(x = as.numeric(PrimaryTemp))) +
+  geom_histogram(binwidth = 1, fill = "white", color = "black", alpha = 1) +
+  labs(title = "Rozkład ilości wody na funt ziarna w zależności od liczby przepisów", x = "Ilość wody na funt ziarna (gal/lb)", y = "Liczba przepisów") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(40, 115)
+```
+Optymalna temperatura fermentacji wynosi ok 20 °C co widzimy na wykresie. Na drugim wykresie przedstawione zostały outliarsy, które prawdobodobnie powstały na skutek użycia innej skali temperaturowej (np. Fahrenheity)
+
+#21.PrimingMethod
+Opis: Metoda dodawania cukru
+
+Skala Pomiarowa: Nominalna
+
+Jednostka Pomiarowa: 
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$PrimingMethod)
+sum(is.na(dane$PrimingMethod))
+length(unique(dane$PrimingMethod))
+x<- sum(grepl("N/A", dane$PrimingAmount, fixed = TRUE))
+x
+```
+- 876 unikalnych wartości
+- 69084 <- ilość braków danych okreslone jako N/A
+- ciężko okreslić rzeczywistą ilość braków danych, ze względu iż są to wartości tekstowe pomieszane z liczbowymi.
+
+Wizualizacja:
+Wyrzucamy zmienną, jest zbyt chaotycznie opisana i zawiera ponad 90% braków danych. Nie stworzymy z niej żadnej sensownej wizualizacji, ani na podstawie pozostałych danych nie ma możliwości stworzenia poprawnie działającego modelu imoutującego wartości. 
+
+#22.PrimingAmount
+Opis: Ilość dodanego cukru
+
+Skala Pomiarowa: Ilorazowa
+
+Jednostka Pomiarowa: 
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$PrimingAmount)
+sum(is.na(dane$PrimingAmount))
+length(unique(dane$PrimingAmount))
+x<- sum(grepl("N/A", dane$PrimingAmount, fixed = TRUE))
+x
+```
+- 69084 braki danych zapisane jako N/A
+- 1899 uniklanych wartości
+- ciężko okreslić rzeczywistą ilość braków danych, ze względu iż są to wartości tekstowe pomieszane z liczbowymi.
+ 
+Wizualizacja:
+Wyrzucamy zmienną, jest zbyt chaotycznie opisana i zawiera ponad 90% braków danych. Nie stworzymy z niej żadnej sensownej wizualizacji, ani na podstawie pozostałych danych nie ma możliwości stworzenia poprawnie działającego modelu imoutującego wartości. 
+
+#23.UserId
+Opis: Identyfikator użytkownika
+
+Skala Pomiarowa: Nominalna
+
+Jednostka Pomiarowa: -
+
+Podstawowe Statystyki:
+```{r}
+summary(dane$UserId)
+sum(is.na(dane$UserId))
+length(unique(dane$UserId))
+```
+- 50490 braków danych
+- 2786 unikalnych wartości
+- pozostałe statystyki nie mają większego sensu
+
+Wizualizacja:
+Brak sensu tworzenia zmiennej przy tylu brakach, dodatkowo nie jest ona ważna w kwestii warzenia piwa.
+
+
+##### PODSUMOWANIE #####
+
+Braki danych:
+Name - 1
+Style - 596
+BoilGravity - 2990
+MashThickness - 29864
+PitchRate - 39252
+PrimaryTemp - 22662
+
+PrimingMethod - 69084
+PrimingAmount - 69084
+UserId - 50490
+
+##### 3.Imputacje braków danych #####
+
+#Analiza
+```{r}
+dane<-as.data.frame(dane)
+head(dane,10)
+```
+```{r}
+dane[dane == "N/A"] <- NA
+
+# Tworzenie wykresu braków danych
+plot_missing <- aggr(dane, col=c('darkgrey','tomato'),
+                     numbers=TRUE, sortVars=TRUE,
+                     labels=names(dane), cex.axis=0.6,
+                     cex.lab=1.5,
+                     gap=1, ylab=c('Braki', "Wzór braków"))
+```
+Zamiana wartości tekstowych "N/A" na braki danych, w celu przedstawienia graficznego braków danych na wykresie. 
+
+"PrimingAmount", "PrimingMethod" i "UserId" mają ponad 60% braków danych. Imputacja danych do nich nie ma większego sensu, ze względu na chaotyczny charakter "PrimingAmount" i "PrimingMethod". W przypadku UserId, zmienna po prostu nie ma większego znaczenia.
+
+Name
+
+#Imputacja
+
+*Name* - ze względu na fakt, że pusty jest tylko jeden rekord, zdecydowano się uzupełnić je ręcznie 
+```{r}
+# Identyfikacja braków
+missing_rows <- which(is.na(dane$Name))
+
+# Wyświetlenie wierszy z brakami
+dane[missing_rows, ]
+
+# Ręczne uzupełnienie braków
+dane$Name[missing_rows[1]] <- "Brakujące_piwo_Blonde_Ale_1"
+
+```
+
+
+*Style* - Uzupełnienie na podstawie StyleID, w którym nie występują braki danych
+
+Instalacja pakietu mice, wymaganego do imputacji
+```{r}
+install.packages("mice")
+library(mice)
+```
+
+Imputacja danych, na podstawie zmiennej StyleID
+```{r}
+sum(is.na(dane$Style)) # Sprawdzenie braków przed imputacją
+
+known_styles <- dane %>% 
+  filter(!is.na(Style)) %>% 
+  distinct(StyleID, Style)
+
+style_map <- known_styles %>%
+  with(setNames(Style, StyleID))
+
+dane<- dane %>%
+  mutate(Style1 = if_else(is.na(Style), style_map[StyleID], Style))
+
+sum(is.na(dane$Style1)) # Sprawdzenie braków po imputacji
+
+
+```
+
+*BoilGravity* - uzupełnianie za pomocą mediany ze względu na istniejące wartości skrajne, które zaburzają średnią
+```{r}
+dane$BoilGravity<-as.numeric(dane$BoilGravity)
+dane<-dane%>%
+  mutate(BoilGravity1=if_else(is.na(BoilGravity), median(BoilGravity,na.rm = T), BoilGravity))
+
+summary(dane$BoilGravity)
+summary(dane$BoilGravity1)
+```
+
+
+*PrimaryTemp* - uzupełnianie za pomocą mediany ze względu na istniejące wartości skrajne, które zaburzają średnią
+```{r}
+dane$PrimaryTemp<-as.numeric(dane$PrimaryTemp)
+dane<-dane%>%
+  mutate(PrimaryTemp1=if_else(is.na(PrimaryTemp), median(PrimaryTemp,na.rm = T), PrimaryTemp))
+
+summary(dane$PrimaryTemp)
+summary(dane$PrimaryTemp1)
+```
+
+*MashThickness* - uzupełnianie za pomocą mediany ze względu na istniejące wartości skrajne, które zaburzają średnią
+
+```{r}
+dane$MashThickness<-as.numeric(dane$MashThickness)
+dane<-dane%>%
+  mutate(MashThickness1=if_else(is.na(MashThickness), median(MashThickness,na.rm = T), MashThickness))
+
+summary(dane$MashThickness)
+summary(dane$MashThickness1)
+```
+
+*PitchRate* - tutaj zastosujemy imputacje za pomocą średniej, ze względu na braki wartości skrajnych
+```{r}
+dane$PitchRate<-as.numeric(dane$PitchRate)
+dane<-dane%>%
+  mutate(PitchRate1=if_else(is.na(PitchRate), mean(PitchRate,na.rm = T), PitchRate))
+
+summary(dane$PitchRate)
+summary(dane$PitchRate1)
+```
+
+##### 4.Analiza wartości skrajnych #####
+
+Instalacja pakietu niezbędnego do analizy wartości skrajnych
+```{r}
+library(gridExtra)
+```
+
+# Identyfikacja wartości skrajnych
+Poniżej znajdują się zmienne, które będziemy analizować pod względem identyfikacji wartości skrajnych. Zostały pominięte, które wykluczyliśmy wcześniej oraz zmienne, które posiadają wartości tekstowe lub są identyfikatorami.
+
+*1. Size (L)*
+
+#Sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$Size.L, main = "Histogram of Size.L")
+
+# Boxplot dla Size.L
+boxplot(dane$Size.L, main = "Boxplot of Size.L")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$Size.L, main = "Normal Q-Q plot of Size.L")
+```
+Po samych wykresach łatwo wywnioskować, że znajdują się wartości skrajne.
+
+#Średnia i odchylenie standardowe
+```{r}
+mean = mean(dane$Size.L.)
+std = sd(dane$Size.L.)
+
+# wykorzystanie reguły 3 odchyleń
+Tmin = mean-(3*std)
+Tmax = mean+(3*std)
+
+# znalezienie outliersów - wartości skrajnych
+length(dane$Size.L.[which(dane$Size.L. < Tmin | dane$Size.L. > Tmax)])
+Tmin
+Tmax
+
+dane$Size.L.[which(dane$Size.L. > Tmin & dane$Size.L. < Tmax)]
+```
+Odchylenie standardowe przyjmuje wartości od -497.19 do 585.05 litrów, więc uznaje 887 obserwacji za outliarsy. Jednak ze względu na statystyki opisowe, progi zbyt odbiegają od wartości 1 i 3 kwantylu, stąd zadecydowano się na kolejną imputacje.
+
+
+#Mediana i odchyenie medianowe
+```{r}
+med = median(dane$Size.L.)
+# odchyelnie od mediany dla każej wartości z bazy danych
+abs_dev = abs(dane$Size.L.-med)
+# odchylenie medianowe
+mad = 1.4826 * median(abs_dev)
+
+Tmin = med-(3*mad) 
+Tmax = med+(3*mad) 
+
+# znalezienie wartości skrajnych
+length(dane$Size.L.[which(dane$Size.L. < Tmin | dane$Size.L. > Tmax)])
+Tmin
+Tmax
+
+dane$Size.L.1 <- ifelse(dane$Size.L < Tmin | dane$Size.L > Tmax, NA, dane$Size.L)
+```
+Odchylenie medianowe przyjmuje wartości od 12.41 do 29.22 litrów, więc uznaje 20595 obserwacji za outliarsy.
+
+#Test Grubbs'a
+```{r}
+grubbs.test(dane$Size.L.)
+```
+Pomimo, że według testu Grubbsa nadal znajdują się outliersy, zdecydowano się na pozostawieniu obecnego zestawu. Dalsze usuwanie outliarsów mogłoby za bardzo zniekszształcić obecny rozkład danych.
+
+
+#imputacja brakujących danych
+```{r}
+summary(dane$Size.L.1)
+dane <- dane %>%
+  mutate(Size.L.1 = if_else(is.na(Size.L.1), mean(Size.L.1, na.rm = TRUE), Size.L.1))
+
+summary(dane$Size.L.1)
+```
+Za pomocą użycia średniej arytmetycznej uzupełniliśmy braki danych spowodowane, usunięciem outliersów. 
+
+#Ponowne sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$Size.L.1, main = "Histogram of Size.L")
+
+# Boxplot dla Size.L
+boxplot(dane$Size.L.1, main = "Boxplot of Size.L")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$Size.L.1, main = "Normal Q-Q plot of Size.L")
+```
+Pomimo, że nadal występują outliersy wykresy stały się znacznie bardziej czytelne stąd decyzja o pozostawieniu obecnego stanu rzeczy.
+
+
+*2. OG*
+
+#Sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$OG, main = "Histogram of Size.L")
+
+# Boxplot dla Size.L
+boxplot(dane$OG, main = "Boxplot of Size.L")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$OG, main = "Normal Q-Q plot of Size.L")
+```
+Po samych wykresach łatwo wywnioskować, że znajdują się wartości skrajne.
+
+```{r}
+plato_to_specific_gravity <- function(plato_density) {
+  water_specific_gravity_constant <- 1.000
+  specific_gravity <- water_specific_gravity_constant + (plato_density / (258.6 - ((plato_density / 258.2) * 227.1)))
+  return(specific_gravity)
+}
+
+# Przekształcenie wartości w tabeli 'dane' na gęstość względem wody, jeśli SugarScale == "Plato"
+dane <- dane %>%
+  mutate(OG_1 = if_else(SugarScale == "Plato", plato_to_specific_gravity(OG), OG))
+```
+Wykorzystanie informacji ze zmiennej SugarScale, gdzie była podana skala pomiaru gęstości
+
+#Mediana i odchyenie medianowe
+```{r}
+med = median(dane$OG_1)
+# odchyelnie od mediany dla każej wartości z bazy danych
+abs_dev = abs(dane$OG_1-med)
+# odchylenie medianowe
+mad = 1.4826 * median(abs_dev)
+
+Tmin = med-(3*mad) 
+Tmax = med+(3*mad) 
+
+# znalezienie wartości skrajnych
+length(dane$OG_1[which(dane$OG_1 < Tmin | dane$OG_1 > Tmax)])
+Tmin
+Tmax
+
+dane$OG_1 <- ifelse(dane$OG_1 < Tmin | dane$OG_1 > Tmax, NA, dane$OG_1)
+summary(dane$OG_1)
+```
+Odchylenie medianowe przyjmuje wartości od 1.026865 do 1.089135, więc uznaje 908  obserwacji za outliarsy.
+
+#Test Grubbs'a
+```{r}
+grubbs.test(dane$OG_1)
+```
+Pomimo, że według testu Grubbsa nadal znajdują się outliersy, zdecydowano się na pozostawieniu obecnego zestawu. Dalsze usuwanie outliarsów mogłoby za bardzo zniekszształcić obecny rozkład danych.
+
+
+#imputacja brakujących danych
+```{r}
+summary(dane$OG_1)
+dane <- dane %>%
+  mutate(OG_1 = if_else(is.na(OG_1), mean(OG_1, na.rm = TRUE), OG_1))
+
+summary(dane$OG_1)
+```
+Za pomocą użycia średniej arytmetycznej uzupełniliśmy braki danych spowodowane, usunięciem outliersów. 
+
+
+#Ponowne sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$OG_1, main = "Histogram of Size.L")
+
+# Boxplot dla Size.L
+boxplot(dane$OG_1, main = "Boxplot of Size.L")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$OG_1, main = "Normal Q-Q plot of Size.L")
+```
+Pomimo, że nadal występują outliersy wykresy stały się znacznie bardziej czytelne stąd decyzja o pozostawieniu obecnego stanu rzeczy.
+
+
+*3. FG*
+
+#Sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$FG, main = "Histogram of FG")
+
+# Boxplot dla Size.L
+boxplot(dane$FG, main = "Boxplot of FG")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$FG, main = "Normal Q-Q plot of FG")
+```
+Po samych wykresach łatwo wywnioskować, że znajdują się wartości skrajne.
+
+```{r}
+plato_to_specific_gravity <- function(plato_density) {
+  water_specific_gravity_constant <- 1.000
+  specific_gravity <- water_specific_gravity_constant + (plato_density / (258.6 - ((plato_density / 258.2) * 227.1)))
+  return(specific_gravity)
+}
+
+# Przekształcenie wartości w tabeli 'dane' na gęstość względem wody, jeśli SugarScale == "Plato"
+dane <- dane %>%
+  mutate(FG_1 = if_else(SugarScale == "Plato", plato_to_specific_gravity(FG), FG))
+```
+Wykorzystanie informacji ze zmiennej SugarScale, gdzie była podana skala pomiaru gęstości
+
+#Mediana i odchyenie medianowe
+```{r}
+med = median(dane$FG_1)
+# odchyelnie od mediany dla każej wartości z bazy danych
+abs_dev = abs(dane$FG_1-med)
+# odchylenie medianowe
+mad = 1.4826 * median(abs_dev)
+
+Tmin = med-(3*mad) 
+Tmax = med+(3*mad) 
+
+# znalezienie wartości skrajnych
+length(dane$FG_1[which(dane$FG_1 < Tmin | dane$FG_1 > Tmax)])
+Tmin
+Tmax
+
+dane$FG_1 <- ifelse(dane$FG_1 < Tmin | dane$FG_1 > Tmax, NA, dane$FG_1)
+summary(dane$FG_1)
+```
+Odchylenie medianowe przyjmuje wartości od 0.9996566 do 1.026343, więc uznaje 1657 obserwacji za outliarsy.
+
+#Test Grubbs'a
+```{r}
+grubbs.test(dane$FG_1)
+```
+Pomimo, że według testu Grubbsa nadal znajdują się outliersy, zdecydowano się na pozostawieniu obecnego zestawu. Dalsze usuwanie outliarsów mogłoby za bardzo zniekszształcić obecny rozkład danych.
+
+
+#imputacja brakujących danych
+```{r}
+summary(dane$FG_1)
+dane <- dane %>%
+  mutate(FG_1 = if_else(is.na(FG_1), mean(FG_1, na.rm = TRUE), FG_1))
+
+summary(dane$FG_1)
+```
+Za pomocą użycia średniej arytmetycznej uzupełniliśmy braki danych spowodowane, usunięciem outliersów. 
+
+
+#Ponowne sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$OG_1, main = "Histogram of FG")
+
+# Boxplot dla Size.L
+boxplot(dane$OG_1, main = "Boxplot of FG")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$OG_1, main = "Normal Q-Q plot of FG")
+```
+Pomimo, że nadal występują outliersy wykresy stały się znacznie bardziej czytelne stąd decyzja o pozostawieniu obecnego stanu rzeczy.
+
+*4. ABV* 
+
+#Sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$ABV, main = "Histogram of ABV")
+
+# Boxplot dla Size.L
+boxplot(dane$ABV, main = "Boxplot of ABV")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$ABV, main = "Normal Q-Q plot of ABV")
+```
+Pomimo, że zmienna posiada outliersy postanowiono je zostawić ze względu na fakt iż stworzenie piw o takiej zawartości alkoholu jest możliwe i usunięcie ich mogłoby zakłamywać wyniki.
+
+*5. IBU*
+
+#Sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$IBU, main = "Histogram of IBU")
+
+# Boxplot dla Size.L
+boxplot(dane$IBU, main = "Boxplot of IBU")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$IBU, main = "Normal Q-Q plot of IBU")
+```
+Po samych wykresach łatwo wywnioskować, że znajdują się wartości skrajne.
+
+#Średnia i odchylenie standardowe
+```{r}
+mean = mean(dane$IBU)
+std = sd(dane$IBU)
+
+# wykorzystanie reguły 3 odchyleń
+Tmin = mean-(3*std)
+Tmax = mean+(3*std)
+
+# znalezienie outliersów - wartości skrajnych
+length(dane$IBU[which(dane$IBU < Tmin | dane$IBU > Tmax)])
+Tmin
+Tmax
+
+dane$IBU_1 <- ifelse(dane$IBU < Tmin | dane$IBU > Tmax, NA, dane$IBU)
+summary(dane$IBU_1)
+```
+Odchylenie standardowe przyjmuje wartości od -84.56034 do 173.1127 litrów, więc uznaje 774 obserwacji za outliarsy. Biorac pod uwagę ze w naszej zmiennej nie ma ujemnych wartości, to górna granica wyznaczona za pomocą odchylenia standardowego ma sens biorąc pod uwagę rzeczywiste wartości jakie może osiągać IBU. 
+
+
+#imputacja brakujących danych
+```{r}
+summary(dane$IBU_1)
+dane <- dane %>%
+  mutate(IBU_1 = if_else(is.na(IBU_1), median(IBU_1, na.rm = TRUE), IBU_1))
+
+summary(dane$IBU_1)
+```
+Za pomocą użycia mediany uzupełniliśmy braki danych spowodowane, usunięciem outliersów. 
+
+
+#Ponowne sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$IBU_1, main = "Histogram of IBU")
+
+# Boxplot dla Size.L
+boxplot(dane$IBU_1, main = "Boxplot of IBU")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$IBU_1, main = "Normal Q-Q plot of IBU")
+```
+Pomimo, że występują outliersy, zostawiamy zmienną w obecnej formie, ze względu że nie wyglądają one na błędy w danych i są faktycznie możliwe do uzyskania.
+
+*6. Color*
+
+#Sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$Color, main = "Histogram of Color")
+
+# Boxplot dla Size.L
+boxplot(dane$Color, main = "Boxplot of Color")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$Color, main = "Normal Q-Q plot of Color")
+```
+Po samych wykresach łatwo wywnioskować, że znajdują się wartości skrajne.
+
+#Średnia i odchylenie standardowe
+```{r}
+mean = mean(dane$Color)
+std = sd(dane$Color)
+
+# wykorzystanie reguły 3 odchyleń
+Tmin = mean-(3*std)
+Tmax = mean+(3*std)
+
+# znalezienie outliersów - wartości skrajnych
+length(dane$Color[which(dane$Color < Tmin | dane$Color > Tmax)])
+Tmin
+Tmax
+
+dane$Color_1 <- ifelse(dane$Color < Tmin | dane$Color > Tmax, NA, dane$Color)
+summary(dane$Color_1)
+```
+Odchylenie standardowe przyjmuje wartości od --22.42854 do -49.23852 litrów, więc uznaje 1657 obserwacji za outliarsy. Biorac pod uwagę ze w naszej zmiennej nie ma ujemnych wartości, dolna granica może pozostać, natomiast górna granica powinna zostać zmniejszona do 40, ze wzgledu na oficjalną skalę SRM.
+
+```{r}
+Tmax = 40
+
+dane$Color_1 <- ifelse(dane$Color < Tmin | dane$Color > Tmax, NA, dane$Color)
+summary(dane$Color_1)
+```
+W ten sposób otrzymujemy 3492 outliersy.
+
+
+#imputacja brakujących danych
+```{r}
+summary(dane$Color_1)
+dane <- dane %>%
+  mutate(Color_1 = if_else(is.na(Color_1), mean(Color_1, na.rm = TRUE), Color_1))
+
+summary(dane$Color_1)
+```
+Za pomocą użycia średniej uzupełniliśmy braki danych spowodowane, usunięciem outliersów.(w tym przypadku nie jest narażona na działanie outliersów)
+
+
+#Ponowne sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$Color_1, main = "Histogram of Color")
+
+# Boxplot dla Size.L
+boxplot(dane$Color_1, main = "Boxplot of Color")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$Color_1, main = "Normal Q-Q plot of Color")
+```
+Pomimo, że występują outliersy, zostawiamy zmienną w obecnej formie, ze względu że nie wyglądają one na błędy w danych i są faktycznie możliwe do uzyskania.
+
+*7. Boil Size*
+
+#Sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla BoilSize
+hist(dane$BoilSize, main = "Histogram of BoilSize")
+
+# Boxplot dla BoilSize
+boxplot(dane$BoilSize, main = "Boxplot of BoilSize")
+
+# Q-Q plot dla BoilSize
+qqnorm(dane$BoilSize, main = "Normal Q-Q plot of BoilSize")
+```
+Po samych wykresach łatwo wywnioskować, że znajdują się wartości skrajne.
+
+#Średnia i odchylenie standardowe
+```{r}
+mean = mean(dane$BoilSize)
+std = sd(dane$BoilSize)
+
+# wykorzystanie reguły 3 odchyleń
+Tmin = mean-(3*std)
+Tmax = mean+(3*std)
+
+# znalezienie outliersów - wartości skrajnych
+length(dane$BoilSize[which(dane$BoilSize < Tmin | dane$BoilSize > Tmax)])
+Tmin
+Tmax
+
+dane$BoilSize_1 <- ifelse(dane$BoilSize < Tmin | dane$BoilSize > Tmax, NA, dane$BoilSize)
+summary(dane$BoilSize_1)
+```
+Ze względu na statystyki opisowe, progi zbyt odbiegają od wartości 1 i 3 kwantylu, stąd zadecydowano się na kolejną imputacje.
+
+
+#Mediana i odchyenie medianowe
+```{r}
+med = median(dane$BoilSize)
+# odchyelnie od mediany dla każej wartości z bazy danych
+abs_dev = abs(dane$BoilSize-med)
+# odchylenie medianowe
+mad = 1.4826 * median(abs_dev)
+
+Tmin = med-(3*mad) 
+Tmax = med+(3*mad) 
+
+# znalezienie wartości skrajnych
+length(dane$BoilSize[which(dane$BoilSize < Tmin | dane$BoilSize > Tmax)])
+Tmin
+Tmax
+
+dane$BoilSize_1 <- ifelse(dane$BoilSize < Tmin | dane$BoilSize > Tmax, NA, dane$BoilSize)
+summary(dane$BoilSize_1)
+```
+Ze względu na fakt iż objętość jest zmienną ilościową możemy pozwolić na usunięcie takiej grupy outliersów.
+
+#imputacja braków
+```{r}
+summary(dane$BoilSize_1)
+dane <- dane %>%
+  mutate(BoilSize_1 = if_else(is.na(BoilSize_1), mean(BoilSize_1, na.rm = TRUE), BoilSize_1))
+
+summary(dane$BoilSize_1)
+```
+Za pomocą użycia średniej uzupełniliśmy braki danych spowodowane usunięciem outliersów.(w tym przypadku nie jest narażona na działanie outliersów)
+
+
+#Ponowne sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla BoilSize
+hist(dane$BoilSize_1, main = "Histogram of BoilSize")
+
+# Boxplot dla BoilSize
+boxplot(dane$BoilSize_1, main = "Boxplot of BoilSize")
+
+# Q-Q plot dla BoilSize
+qqnorm(dane$BoilSize_1, main = "Normal Q-Q plot of BoilSize")
+```
+Wykresy po imputacji danych stały się nieco bardziej czytelne. Znajdują się outliersy, jednak już zostało usunięte ponad 10% obserwacji, więc dlasza ingerencja nie jest wskazana.
+
+*8. Boil Time*
+
+#Sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla BoilTime
+hist(dane$BoilTime, main = "Histogram of BoilTime")
+
+# Boxplot dla BoilTime
+boxplot(dane$BoilTime, main = "Boxplot of BoilTime")
+
+# Q-Q plot dla BoilTime
+qqnorm(dane$BoilTime, main = "Normal Q-Q plot of BoilTime")
+```
+Pomimo, że wykresy nie są czytelne obserwacje które występują nie są błędne i mogą mieć odwzorowanie w rzeczywistości z tego powodu zostawiamy je.
+
+*9. Boil Gravity*
+
+
+#Sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$BoilGravity1, main = "Histogram of BoilGravity")
+
+# Boxplot dla Size.L
+boxplot(dane$BoilGravity1, main = "Boxplot of BoilGravity")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$BoilGravity1, main = "Normal Q-Q plot of BoilGravity")
+```
+Po samych wykresach łatwo wywnioskować, że znajdują się wartości skrajne.
+
+```{r}
+plato_to_specific_gravity <- function(plato_density) {
+  water_specific_gravity_constant <- 1.000
+  specific_gravity <- water_specific_gravity_constant + (plato_density / (258.6 - ((plato_density / 258.2) * 227.1)))
+  return(specific_gravity)
+}
+
+# Przekształcenie wartości w tabeli 'dane' na gęstość względem wody, jeśli SugarScale == "Plato"
+dane <- dane %>%
+  mutate(BoilGravity_1 = if_else(SugarScale == "Plato", plato_to_specific_gravity(BoilGravity1), BoilGravity1))
+```
+Wykorzystanie informacji ze zmiennej SugarScale, gdzie była podana skala pomiaru gęstości
+
+#Mediana i odchyenie medianowe
+```{r}
+med = median(dane$BoilGravity_1)
+# odchyelnie od mediany dla każej wartości z bazy danych
+abs_dev = abs(dane$BoilGravity_1-med)
+# odchylenie medianowe
+mad = 1.4826 * median(abs_dev)
+
+Tmin = med-(3*mad) 
+Tmax = med+(3*mad) 
+
+# znalezienie wartości skrajnych
+length(dane$BoilGravity_1[which(dane$BoilGravity_1 < Tmin | dane$BoilGravity_1 > Tmax)])
+Tmin
+Tmax
+
+dane$BoilGravity_1 <- ifelse(dane$BoilGravity_1 < Tmin | dane$BoilGravity_1 > Tmax, NA, dane$BoilGravity_1)
+summary(dane$BoilGravity_1)
+```
+Po usunięciu outliersów za pomocą odchylenia medianowego, otrzymaliśmy 6963 braki danych.
+
+```{r}
+summary(dane$BoilGravity_1)
+dane <- dane %>%
+  mutate(BoilGravity_1 = if_else(is.na(BoilGravity_1), mean(BoilGravity_1, na.rm = TRUE), BoilGravity_1))
+
+summary(dane$BoilGravity_1)
+```
+Za pomocą użycia średniej uzupełniliśmy braki danych spowodowane usunięciem outliersów.
+
+#Ponowne sprawdzenie wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$BoilGravity_1, main = "Histogram of BoilGravity")
+
+# Boxplot dla Size.L
+boxplot(dane$BoilGravity_1, main = "Boxplot of BoilGravity")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$BoilGravity_1, main = "Normal Q-Q plot of BoilGravity")
+```
+Wykresy wyglądają na znacznie bardziej czytelne. Dalsza ingerencja w outliersy mogłaby zakłamywać dane.
+
+
+*10. Efficiency*
+
+Ze względu, że jest to procentowa wydajność bez sensowne jest usuwanie outliersów.
+
+*11. MashThickness*
+
+#Sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$MashThickness1, main = "Histogram of MashThickness")
+
+# Boxplot dla Size.L
+boxplot(dane$MashThickness1, main = "Boxplot of MashThickness")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$MashThickness1, main = "Normal Q-Q plot of MashThickness")
+```
+Po samych wykresach łatwo wywnioskować, że znajdują się wartości skrajne.
+
+#Średnia i odchylenie standardowe
+```{r}
+mean = mean(dane$MashThickness1)
+std = sd(dane$MashThickness1)
+
+# wykorzystanie reguły 3 odchyleń
+Tmin = mean-(3*std)
+Tmax = mean+(3*std)
+
+# znalezienie outliersów - wartości skrajnych
+length(dane$MashThickness1[which(dane$MashThickness1 < Tmin | dane$MashThickness1 > Tmax)])
+Tmin
+Tmax
+
+dane$MashThickness_1 <- ifelse(dane$MashThickness1 < Tmin | dane$MashThickness1 > Tmax, NA, dane$MashThickness1)
+summary(dane$MashThickness_1)
+```
+Ze względu na statystyki opisowe, progi zbyt odbiegają od wartości 1 i 3 kwantylu, stąd zadecydowano się na kolejną imputacje.
+
+
+#Mediana i odchyenie medianowe
+```{r}
+med = median(dane$MashThickness1)
+# odchyelnie od mediany dla każej wartości z bazy danych
+abs_dev = abs(dane$MashThickness1-med)
+# odchylenie medianowe
+mad = 1.4826 * median(abs_dev)
+
+Tmin = med-(3*mad) 
+Tmax = med+(3*mad) 
+
+# znalezienie wartości skrajnych
+length(dane$MashThickness1[which(dane$MashThickness1 < Tmin | dane$MashThickness1 > Tmax)])
+Tmin
+Tmax
+
+dane$MashThickness_1 <- ifelse(dane$MashThickness1 < Tmin | dane$MashThickness1 > Tmax, NA, dane$MashThickness1)
+summary(dane$MashThickness_1)
+```
+Statystyki są zbyt jednolite, wczytujemy poprzedni skrypt ze średnią i na nim bazujemy
+
+#Średnia i odchylenie standardowe
+```{r}
+mean = mean(dane$MashThickness1)
+std = sd(dane$MashThickness1)
+
+# wykorzystanie reguły 3 odchyleń
+Tmin = mean-(3*std)
+Tmax = mean+(3*std)
+
+# znalezienie outliersów - wartości skrajnych
+length(dane$MashThickness1[which(dane$MashThickness1 < Tmin | dane$MashThickness1 > Tmax)])
+Tmin
+Tmax
+
+dane$MashThickness_1 <- ifelse(dane$MashThickness1 < Tmin | dane$MashThickness1 > Tmax, NA, dane$MashThickness1)
+summary(dane$MashThickness_1)
+```
+
+#imputacja braków
+```{r}
+summary(dane$MashThickness_1)
+dane <- dane %>%
+  mutate(MashThickness_1 = if_else(is.na(MashThickness_1), mean(MashThickness_1, na.rm = TRUE), MashThickness_1))
+
+summary(dane$MashThickness_1)
+```
+Za pomocą użycia średniej uzupełniliśmy braki danych spowodowane usunięciem outliersów.(w tym przypadku nie jest narażona na działanie outliersów)
+
+
+#Ponowne sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$MashThickness_1, main = "Histogram of MashThickness")
+
+# Boxplot dla Size.L
+boxplot(dane$MashThickness_1, main = "Boxplot of MashThickness")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$MashThickness_1, main = "Normal Q-Q plot of MashThickness")
+```
+Wykresy nie są do końca czytelne, jednak gdybyśmy użyli usuwania outliersów za pomocą mediany prawdopodobnie zostałyby usunięte istotne informacje.
+
+*12. PitchRate*
+
+Patrząc na to jakie wartości osiąga zmienna, oraz jej rozkład usuwanie outliersów wydaje się być zbędne.
+
+
+*13. PrimaryTemp*
+
+#Sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$PrimaryTemp1, main = "Histogram of PrimaryTemp")
+
+# Boxplot dla Size.L
+boxplot(dane$PrimaryTemp1, main = "Boxplot of PrimaryTemp")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$PrimaryTemp1, main = "Normal Q-Q plot of PrimaryTemp")
+```
+Z uwagi na podejrzenia wystepowania temperatury w skali Fahrenheita, zdecydowano się na przekształcenie wartości od 40 w górę, na przelicznik ze stopni Fahrenheita na celsjusza
+```{r}
+fahrenheit_to_celsius <- function(f) {
+  (f - 32) * 5 / 9
+}
+
+dane <- dane %>%
+  mutate(PrimaryTemp1 = if_else(PrimaryTemp1 > 40, fahrenheit_to_celsius(PrimaryTemp1), PrimaryTemp1))
+
+```
+#Ponowne sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$PrimaryTemp1, main = "Histogram of PrimaryTemp")
+
+# Boxplot dla Size.L
+boxplot(dane$PrimaryTemp1, main = "Boxplot of PrimaryTemp")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$PrimaryTemp1, main = "Normal Q-Q plot of PrimaryTemp")
+```
+Niewielka poprawa, decyzja o usunięciu outliersów za pomocą odchylenia standardowego i średniej
+#Średnia i odchylenie standardowe
+```{r}
+mean = mean(dane$PrimaryTemp1)
+std = sd(dane$PrimaryTemp1)
+
+# wykorzystanie reguły 3 odchyleń
+Tmin = mean-(3*std)
+Tmax = mean+(3*std)
+
+# znalezienie outliersów - wartości skrajnych
+length(dane$PrimaryTemp1[which(dane$PrimaryTemp1 < Tmin | dane$PrimaryTemp1 > Tmax)])
+Tmin
+Tmax
+
+dane$PrimaryTemp1 <- ifelse(dane$PrimaryTemp1 < Tmin | dane$PrimaryTemp1 > Tmax, NA, dane$PrimaryTemp1)
+summary(dane$PrimaryTemp1)
+```
+Zostawiamy, ze względu na fakt iż dalsza ingerencja może zaburzyć wyniki, szczególnie że fermentacja w temperaturze 27,78 stopniach celsjusza jest możliwa.
+
+#imputacja braków
+```{r}
+summary(dane$PrimaryTemp1)
+dane <- dane %>%
+  mutate(PrimaryTemp_1 = if_else(is.na(PrimaryTemp1), mean(PrimaryTemp1, na.rm = TRUE), PrimaryTemp1))
+
+summary(dane$PrimaryTemp_1)
+```
+#Ponowne sprawdzenie wartości skrajnych za pomocą wykresów
+```{r}
+par(mfrow = c(1, 3))
+
+# Histogram dla Size.L
+hist(dane$PrimaryTemp_1, main = "Histogram of PrimaryTemp")
+
+# Boxplot dla Size.L
+boxplot(dane$PrimaryTemp_1, main = "Boxplot of PrimaryTemp")
+
+# Q-Q plot dla Size.L
+qqnorm(dane$PrimaryTemp_1, main = "Normal Q-Q plot of PrimaryTemp")
+```
+Wykres wygląda teraz znacznie bardziej czytelnie.
+
+### PODSUMOWANIE
+
+W każdej zmiennej znajdują się outliersy, nie zdecydowano się na ich usunięcie ze względu na to, że w tak dużym zbiorze danych wartości dla bardziej popularnych rodzajów piw mogą błędnie manipulować wynikami hipotez, przez co niszowe piwa, które mają niestandardowe wartości mogą zostać błędnie określone jako nieprawidłowe wartości. Stąd też nie sugerowano się testami statystycznymi.
+
+##### 5.Wybór zmiennych do badania #####
+# Wybranie metody doboru zmiennych z uzasadnieniem wyboru
+
+PRZYGOTOWANIE NOWEJ TABLICY Z UZUPEŁNIONYMI WSZYSTKIMI ZMIENNYMI
+```{r}
+nowe_dane <- dane %>%
+  select(BeerID, Name, URL, Style, StyleID, Size.L.1, OG_1, FG_1, ABV, IBU_1, Color_1, BoilSize_1,
+         BoilTime, BoilGravity_1, Efficiency, MashThickness_1, SugarScale, BrewMethod,
+         PitchRate1, PrimaryTemp_1) %>%
+  rename_with(~ gsub("_1$", "", .x), ends_with("_1")) %>%
+rename_with(~ gsub("1$", "", .x), ends_with("1"))
+```
+
+Analiza Korelacji - wybrana ze względu na ocene silnych związków między zmiennymi oraz możliwość graficznego przedstawienia.
+
+Do analizy wybrano następujące zmienne ('StyleID', 'Size.L.', 'OG', 'FG', 'ABV', 'IBU','Color', 'BoilSize', 'BoilTime', 'BoilGravity', 'Efficiency', 'MashThickness', 'PitchRate', 'PrimaryTemp')
+
+Pominięto zmienne zawierające wartości tekstowe i unikalne identyfikatory.
+
+
+```{r}
+zmienne <- c('Size.L.', 'OG', 'FG', 'ABV', 'IBU',
+             'Color', 'BoilSize', 'BoilTime', 'BoilGravity',
+             'Efficiency', 'MashThickness', 'PitchRate', 'PrimaryTemp')
+
+# Obliczenie macierzy korelacji Pearsona
+korelacja <- cor(nowe_dane[, zmienne], method = "pearson")
+print(korelacja)
+```
+
+```{r}
+library(corrplot)
+
+# Wyświetlenie wykresu ciepła macierzy korelacji
+corrplot(korelacja, method = "color", type = "upper", 
+         tl.col = "black", tl.srt = 45, 
+         addCoef.col = "black", number.cex = 0.7)
+```
+Nie wiadomo w jaki sposób FG koreluje z innymi wartościami prawdopodobnie przez małą zmienność, przez co następuje decyzja o usunięciu tej zmiennej.
+
+Najsilniej jest skorelowana ze sobą zmienna OG oraz ABV. Wartość korelacji współczynnika Pearsona wynosi 0,59 więc jest to silna zależność jednak reprezentują inne cechy badane i nie wpływają negatywnie na analize wyników, stąd decyzja o pozostawieniu ich.
+
+PitchRate jest najsilniej ujemnie skorelowany z PrimaryTemp, co zgadza się z faktem, że ilość drożdży jest zależna od wysokości temperatury.
+
+
+##### 6.Wybór jednostek do badania #####
+# Wybranie schematu losowania z uzasadnieniem wyboru
+
+Losowanie proste - ze względu na prostą implementacje i każdy element ma szanse na dostanie się do próby. Każda zmienna ma taką samą ilość obserwacji więc nie pojawia się problem niedoreprezentowania.
+
+
+```{r}
+duza_tabela <- data.frame(nowe_dane)
+
+# Losowanie 10 losowych indeksów wierszy
+losowe_indeksy <- sample(nrow(duza_tabela), 10)
+
+# Wybranie wierszy z każdej zmiennej
+probka <- duza_tabela[losowe_indeksy, ]
+
+# Wyświetlenie wylosowanej próbki
+print(probka)
+```
+
+
+
