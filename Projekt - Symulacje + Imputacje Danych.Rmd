@@ -1,0 +1,479 @@
+---
+title: "Projekt - Symulacje + Imputacje Danych"
+author: "Bartosz Deptuła"
+date: "2024-06-20"
+output: html_document
+---
+
+### BIBLIOTEKI I PAKIETY ###
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(VIM)
+library(zoo)
+library(mice)
+library(nortest)
+library(misty)
+library(naniar)
+library(caret)
+library(ggplot2)
+library(gridExtra)
+```
+
+### CEL BADANIA ###
+
+Badanie miało na celu przeprowadzenie symulacji gry Blackjack w celu generacji wyników rozgrywki. Następnie zastosowano metodę MCAR do symulacji braków danych. W celu imputacji tych braków danych porównano trzy różne modele, oceniając ich skuteczność w przywracaniu kompletności danych. Na podstawie wyników porównania wybrano model, który osiągnął najlepsze rezultaty w tym procesie.
+
+### 1. SYMULACJA GRY ###
+
+```{r}
+## Gra w blackjack - symulacja stochastyczna
+
+## Element losowania karty z talii
+losuj_kartę <- function(talia) {
+  karta <- sample(talia, 1)       # Losowanie jednej karty z talii
+  talia <- talia[talia != karta]  # Po wylosowaniu usuwa kartę z talii
+  return(list(karta = karta, talia = talia))  # Zwrócenie wylosowanej talii i zaktualizowanie talii
+}
+
+## Obliczanie wartości ręki
+wart_ręki <- function(ręka) {
+  wartość <- sum(ręka)            # Sumowanie wartości wszystkich kart w ręce
+  licz_asy <- sum(ręka == 11)     # Obliczenie ilości Asów w ręce
+  while (wartość > 21 && licz_asy > 0) {  # Jeśli wartość ręki przekracza 21 i są Asy, zamienia wartość Asa z 11 na 1
+    wartość <- wartość - 10            # Zamiana na 1
+    licz_asy <- licz_asy - 1           # Usuwa asa z talii
+  }
+  return(wartość)                      # Zwrócenie wartości ręki
+}
+
+## Modelowanie wyboru gracza - dobierz lub stój.
+akcja_gracza <- function() {
+  akcja <- c("dobierz", "stój")        # Dwie możliwości wyboru
+  return(sample(akcja, 1))             # Losowe wybranie jednej z akcji
+}
+
+# Przygotowanie talii (karty 2-10 plus Asy)
+talia <- rep(c(2:10, 10, 10, 10, 11), 4)
+
+# Dodanie króla, damy i waleta
+talia <- c(talia, rep(10, 12))
+
+# Inicjalizacja ramki danych na wyniki gier
+wyniki_gier <- data.frame(
+  Gra = numeric(10000),
+  RękaGracza = character(10000),
+  RękaKrupiera = character(10000),
+  WartoscGracza = numeric(10000),
+  WartoscKrupiera = numeric(10000),
+  LiczbaDobrańGracza = numeric(10000),
+  LiczbaDobrańKrupiera = numeric(10000),
+  Wynik = character(10000),
+  stringsAsFactors = FALSE
+)
+
+# Pętla 10000 gier
+for (gra in 1:10000) {
+  # Inicjalizacja rąk gracza i krupiera
+  ręka_gracza <- numeric(0)
+  ręka_krupiera <- numeric(0)
+  
+  # Kopia talii na potrzeby gry
+  talia_gra <- talia
+  
+  # Liczniki dobrań gracza i krupiera
+  liczba_dobrań_gracza <- 0
+  liczba_dobrań_krupiera <- 0
+  
+  # Rozpoczęcie gry
+  for (i in 1:2) {
+    losuj <- losuj_kartę(talia_gra)          # Losowanie karty dla gracza
+    ręka_gracza <- c(ręka_gracza, losuj$karta)  # Przypisanie karty do ręki gracza
+    talia_gra <- losuj$talia                       # Aktualizowanie talii gry
+    liczba_dobrań_gracza <- liczba_dobrań_gracza + 1
+    
+    losuj <- losuj_kartę(talia_gra)                # Losowanie karty dla krupiera
+    ręka_krupiera <- c(ręka_krupiera, losuj$karta)  # Przypisanie karty do ręki krupiera
+    talia_gra <- losuj$talia                       # Aktualizowanie talii gry
+    liczba_dobrań_krupiera <- liczba_dobrań_krupiera + 1
+  }
+  
+  # Tura gracza
+  while (akcja_gracza() == "dobierz") {        # Założenia dla gracza dobierającego
+    losuj <- losuj_kartę(talia_gra)                # Losowanie karty dla gracza
+    ręka_gracza <- c(ręka_gracza, losuj$karta)  # Przypisanie karty do ręki gracza
+    talia_gra <- losuj$talia                       # Aktualizowanie talii gry
+    liczba_dobrań_gracza <- liczba_dobrań_gracza + 1
+    
+    if (wart_ręki(ręka_gracza) > 21)  {           # Jeśli ręka gracza przekracza 21
+      break                                       # Zakończ
+    }
+  }
+  
+  # Tura krupiera
+  while (wart_ręki(ręka_krupiera) < 17) {         # Krupier dobiera karty do minimum 17 punktów
+    losuj <- losuj_kartę(talia_gra)                   # Losowanie karty dla krupiera
+    ręka_krupiera <- c(ręka_krupiera, losuj$karta)  # Przypisanie karty do ręki krupiera
+    talia_gra <- losuj$talia                           # Aktualizowanie talii gry
+    liczba_dobrań_krupiera <- liczba_dobrań_krupiera + 1
+    
+    if (wart_ręki(ręka_krupiera) > 21) {           # Jeśli ręka krupiera przekracza 21
+      break                                        # Zakończ
+    }
+  }
+  
+  # Określenie wyniku gry
+  wartość_gracza <- wart_ręki(ręka_gracza)         # Wartość ręki gracza
+  wartość_krupiera <- wart_ręki(ręka_krupiera)     # Wartość ręki krupiera
+  
+  if (wartość_gracza <= 21 && wartość_krupiera <= 21) {  # Sprawdzenie czy wartość ręki gracza i krupiera są mniejsze lub równe 21 punktów
+    if (wartość_gracza > wartość_krupiera) { 
+      wynik <- "Wygrana gracza"                      # Jeśli ręka gracza jest większa od krupiera, gracz wygrywa
+    } else if (wartość_gracza < wartość_krupiera) {
+      wynik <- "Wygrana krupiera"                  # Jeśli wartość ręki krupiera jest większa, krupier wygrywa
+    } else {
+      wynik <- "Remis"                              # Jeśli ręce są równe, remis
+    }
+  } else {
+    if (wartość_krupiera > 21) {
+      wynik <- "Krupier powyżej 21 punktów. Gracz wygrywa" # Jeśli krupier przekroczył 21 punktów, gracz wygrywa
+    } else {
+      wynik <- "Gracz powyżej 21 punktów. Krupier wygrywa" # Jeśli gracz przekroczył 21 punktów, krupier wygrywa
+    }
+  }
+  
+  # Zapis wyników gry do ramki danych
+  wyniki_gier$Gra[gra] <- gra
+  wyniki_gier$RękaGracza[gra] <- paste(ręka_gracza, collapse = ", ")
+  wyniki_gier$RękaKrupiera[gra] <- paste(ręka_krupiera, collapse = ", ")
+  wyniki_gier$WartoscGracza[gra] <- wartość_gracza
+  wyniki_gier$WartoscKrupiera[gra] <- wartość_krupiera
+  wyniki_gier$LiczbaDobrańGracza[gra] <- liczba_dobrań_gracza
+  wyniki_gier$LiczbaDobrańKrupiera[gra] <- liczba_dobrań_krupiera
+  wyniki_gier$Wynik[gra] <- wynik
+}
+
+# Wyświetlenie ramki danych z wynikami wszystkich gier
+print(wyniki_gier)
+
+```
+
+### 2. GENEROWANIE BRAKÓW DANYCH ###
+
+Ze względu na fakt, iż braki danych generowane w sposób losowy są mniej narażone na obciążenia metod analizy danych oraz imputacja w ich przypadku jest mniej skomplikowana i prostsza do wprowadzenia, to zdecydowano się na metode "MCAR"
+
+```{r}
+# MCAR
+
+set.seed(123)
+prop <- 0.15
+data_mcar <- wyniki_gier
+for (col in 1:ncol(data_mcar)) {
+  mcar <- runif(nrow(data_mcar), min=0, max=1)
+  data_mcar[mcar < prop, col] <- NA
+}
+```
+
+
+### 3. IMPUTACJA DANYCH ###
+
+Poniżej znajduje się kod sprawdzający liczbę braków dla poszczególnych zmiennych
+
+```{r}
+sum(is.na(data_mcar$Gra))
+sum(is.na(data_mcar$RękaGracza))
+sum(is.na(data_mcar$RękaKrupiera))
+sum(is.na(data_mcar$WartoscGracza))
+sum(is.na(data_mcar$WartoscKrupiera))
+sum(is.na(data_mcar$LiczbaDobrańGracza))
+sum(is.na(data_mcar$LiczbaDobrańKrupiera))
+sum(is.na(data_mcar$Wynik))
+```
+
+#IMPUTACJA HOT-DECK
+
+Pierwszą metodą imputacji jaką zastosujemy dla naszego zbioru danych będzie metoda "Hot Deck". harakteryzuje się ona imputacją brakujących wartości poprzez zastępowanie ich wartościami z podobnych, pełnych przypadków (rekordów) w zbiorze danych. Wybór podobnych przypadków opiera się na określonych kryteriach, takich jak podobieństwo w wybranych zmiennych domenowych, co pomaga zachować strukturę i zależności w danych.
+
+```{r}
+data_hotdeck <- hotdeck(data = data_mcar, variable = 'Gra') 
+
+data_hotdeck <- hotdeck(data = data_hotdeck, variable = 'RękaGracza', domain_var=c('WartoscGracza','LiczbaDobrańGracza'))
+
+data_hotdeck <- hotdeck(data = data_hotdeck, variable = 'RękaKrupiera', domain_var=c('WartoscKrupiera','LiczbaDobrańKrupiera'))
+
+data_hotdeck <- hotdeck(data = data_hotdeck, variable = 'WartoscGracza', domain_var='RękaGracza')
+
+data_hotdeck <- hotdeck(data = data_hotdeck, variable = 'WartoscKrupiera', domain_var='RękaKrupiera')
+
+data_hotdeck <- hotdeck(data = data_hotdeck, variable = 'LiczbaDobrańGracza', domain_var='RękaGracza')
+
+data_hotdeck <- hotdeck(data = data_hotdeck, variable = 'LiczbaDobrańKrupiera', domain_var='RękaKrupiera')
+
+data_hotdeck <- hotdeck(data = data_hotdeck, variable = 'Wynik', domain_var=c('WartoscKrupiera','WartoscGracza'))
+```
+
+Sprawdzenie braków danych po wykonaniu imputacji.
+
+```{r}
+sum(is.na(data_hotdeck$Gra))
+sum(is.na(data_hotdeck$RękaGracza))
+sum(is.na(data_hotdeck$RękaKrupiera))
+sum(is.na(data_hotdeck$WartoscGracza))
+sum(is.na(data_hotdeck$WartoscKrupiera))
+sum(is.na(data_hotdeck$LiczbaDobrańGracza))
+sum(is.na(data_hotdeck$LiczbaDobrańKrupiera))
+sum(is.na(data_hotdeck$Wynik))
+```
+Pomimo imputacji nadal występują braki danych, ze względu na fakt, że w każdej zmiennej są braki, ponieważ nie ma wystarczająco wielu kompletnych rekordów do uzupełnienia brakujących wartości. Szczególnie jeśli zmienne domenowe używane do imputacji zawierają braki, metoda nie może znaleźć odpowiednich donorów do imputacji.
+
+#IMPUTACJA KNN
+Metoda "KNN" (najbliższych sąsiadów) imputuje brakujące wartości, identyfikując k najbliższych sąsiadów (rekordów) w zbiorze danych na podstawie odległości w przestrzeni zmiennych i używając ich wartości do wypełnienia braków. Ta metoda zakłada, że podobne przypadki mają podobne wartości zmiennych, co pozwala na zachowanie struktury danych podczas imputacji. 
+
+```{r}
+data_knn <- kNN(data = data_mcar, variable = "Gra", k=5)
+
+data_knn <- kNN(data = data_knn, variable = "WartoscGracza", dist_var = c("RękaGracza"), k = 5)
+
+data_knn <- kNN(data = data_knn, variable = "WartoscKrupiera", dist_var = c("RękaKrupiera"), k = 5)
+
+data_knn <- kNN(data = data_knn, variable = "RękaGracza", dist_var = c("WartoscGracza", "LiczbaDobrańGracza"), k = 5)
+
+data_knn <- kNN(data = data_knn, variable = "RękaKrupiera", dist_var = c("WartoscKrupiera", "LiczbaDobrańKrupiera"), k = 5)
+
+data_knn <- kNN(data = data_knn, variable = "LiczbaDobrańGracza", dist_var = c("RękaGracza"), k = 5)
+
+data_knn <- kNN(data = data_knn, variable = "LiczbaDobrańKrupiera", dist_var = c("RękaKrupiera"), k = 5)
+
+data_knn <- kNN(data = data_knn, variable = "Wynik", dist_var = c("WartoscKrupiera", "WartoscGracza"), k = 1)
+```
+
+Sprawdzenie braków danych po wykonaniu imputacji.
+
+```{r}
+sum(is.na(data_knn$Gra))
+sum(is.na(data_knn$RękaGracza))
+sum(is.na(data_knn$RękaKrupiera))
+sum(is.na(data_knn$WartoscGracza))
+sum(is.na(data_knn$WartoscKrupiera))
+sum(is.na(data_knn$LiczbaDobrańGracza))
+sum(is.na(data_knn$LiczbaDobrańKrupiera))
+sum(is.na(data_knn$Wynik))
+```
+Wszystkie braki danych zostały uzupełnione.
+
+#IMPUTACJA MATCH
+
+Metoda "Match" imputuje brakujące wartości poprzez dopasowywanie rekordów z brakami do najbardziej podobnych rekordów bez braków, zazwyczaj przy użyciu algorytmów dopasowywania, takich jak nearest neighbor. Ta technika wykorzystuje podobieństwa w danych, aby zapewnić, że imputowane wartości są jak najbardziej zbliżone do rzeczywistych.
+
+```{r}
+data_match <- matchImpute(data = data_mcar, variable = 'Gra', match_var= 'WartoscGracza') 
+
+data_match <- matchImpute(data = data_match, variable = 'WartoscGracza', match_var='RękaGracza')
+
+data_match <- matchImpute(data = data_match, variable = 'WartoscKrupiera', match_var='RękaKrupiera')
+
+data_match <- matchImpute(data = data_match, variable = 'RękaGracza', match_var=c('WartoscGracza','LiczbaDobrańGracza'))
+
+data_match <- matchImpute(data = data_match, variable = 'RękaKrupiera', match_var=c('WartoscKrupiera','LiczbaDobrańKrupiera'))
+
+data_match <- matchImpute(data = data_match, variable = 'LiczbaDobrańGracza', match_var='RękaGracza')
+
+data_match <- matchImpute(data = data_match, variable = 'LiczbaDobrańKrupiera', match_var='RękaKrupiera')
+
+data_match <- matchImpute(data = data_match, variable = 'Wynik', match_var=c('WartoscKrupiera','WartoscGracza'))
+```
+
+Sprawdzenie braków danych po wykonaniu imputacji.
+
+```{r}
+sum(is.na(data_match$Gra))
+sum(is.na(data_match$RękaGracza))
+sum(is.na(data_match$RękaKrupiera))
+sum(is.na(data_match$WartoscGracza))
+sum(is.na(data_match$WartoscKrupiera))
+sum(is.na(data_match$LiczbaDobrańGracza))
+sum(is.na(data_match$LiczbaDobrańKrupiera))
+sum(is.na(data_match$Wynik))
+```
+Wszystkie braki danych zostały uzupełnione.
+
+### 4. PORÓWNANIE WYNIKÓW
+
+Na tym etapie porównane zostaną zmienne ilościowe - WartoscGracz, WartoscKrupiera, LiczbaDobrańGracza, LiczbaDobrańKrupiera oraz zmienna jakościowa - Wynik.
+
+#Porównanie zmiennej jakościowej "Wynik"
+```{r}
+barplot(table(data_hotdeck$Wynik))
+barplot(table(data_knn$Wynik))
+barplot(table(data_match$Wynik))
+barplot(table(wyniki_gier$Wynik))
+```
+Porównując wykresy, znacznie widać że metoda KNN odbiega od dwóch pozostałych, ze względu na fakt, iż najbardziej się różni od rzeczywistych wyników.
+
+Następnie metody zostały porównane za pomocą macierzy konfuzji.
+
+```{r}
+confusionMatrix(as.factor(data_hotdeck$Wynik), as.factor(data_knn$Wynik))
+
+confusionMatrix(as.factor(data_knn$Wynik), as.factor(data_match$Wynik))
+
+confusionMatrix(as.factor(data_match$Wynik), as.factor(data_hotdeck$Wynik))
+```
+Accurancy: Wszystkie trzy porównania pokazują wysoką dokładność (>96%), co sugeruje, że metody imputacji dają zbliżone wyniki w klasyfikacji.
+
+Kappa: Wartości Kappa również są wysokie, wskazując na dobrą zgodność między różnymi metodami imputacji.
+
+Wysokie wartości czułości i specyficzności we wszystkich klasach wskazują, że niezależnie od metody imputacji, model dobrze rozpoznaje różne wyniki gry.
+
+Różnice w wartościach p w teście McNemara mogą sugerować, że istnieją niewielkie, ale istotne różnice w sposobie, w jaki różne metody imputacji wpływają na wyniki klasyfikacji.
+
+
+Ogólnie rzecz biorąc, wszystkie metody imputacji wydają się działać dobrze, ale dokładniejsze wyniki i lepsza zgodność są osiągane przez metodę porównującą "data_match" z "data_hotdeck".
+
+#Porównanie zmiennej ilościowej "WartoscGracza"
+
+```{r}
+hist(data_hotdeck$WartoscGracza)
+hist(data_knn$WartoscGracza)
+hist(data_match$WartoscGracza)
+hist(wyniki_gier$WartoscGracza)
+```
+Na podstawie kształtu wykresów, można wywnioskować, że modele "Hot Deck" i "Match" są najbliższe realnym wynikom. Model KNN w znaczącym stopniu różni się od reszty.
+
+```{r}
+plot(data_hotdeck$WartoscGracza, data_knn$WartoscGracza)
+plot(data_hotdeck$WartoscGracza, data_match$WartoscGracza)
+plot(data_match$WartoscGracza, data_knn$WartoscGracza)
+plot(data_match$WartoscGracza, wyniki_gier$WartoscGracza)
+plot(data_hotdeck$WartoscGracza, wyniki_gier$WartoscGracza)
+```
+Na wykresie przedstawiającym zależność między modelem "Hot Deck", a "Match" wartości najwyraźniej układają się wzdłżuż przekątnej, co sugeruje nam największą zgodność między tymi modelami. Porównując modele "Hot Deck" oraz "Match" z oryginalnymi wynikami możemy zauwazyć, że mniejsze rozproszenie występuje w modelu "Hot Deck".
+
+```{r}
+cor(data_hotdeck$WartoscGracza, data_knn$WartoscGracza)
+cor(data_hotdeck$WartoscGracza, data_match$WartoscGracza)
+cor(data_match$WartoscGracza, data_knn$WartoscGracza)
+```
+Ze względu na fakt, że w modelu "Hot Deck" nadal występują braki danych, nie jest możliwe zbadanie jego korelacji z innymi modelami. Natomiast korelacja między modelami KNN i Match wynosi ok. 0.87, co świadczy o wysokiej korelacji. 
+
+#Porównanie zmiennej ilościowej "WartoscKrupiera"
+
+```{r}
+hist(data_hotdeck$WartoscKrupiera)
+hist(data_knn$WartoscKrupiera)
+hist(data_match$WartoscKrupiera)
+hist(wyniki_gier$WartoscKrupiera)
+```
+Zależności między wykresami prezentują się podobnie jak w przypadku poprzedniej zmiennej, "Hot Deck" i "Match" przybierają podobne wartości do rzeczywistych.
+
+```{r}
+plot(data_hotdeck$WartoscKrupiera, data_knn$WartoscKrupiera)
+plot(data_hotdeck$WartoscKrupiera, data_match$WartoscKrupiera)
+plot(data_match$WartoscKrupiera, data_knn$WartoscKrupiera)
+```
+Rozproszenia na wykresie prezentują się dosyć podobnie, ciężko ocenić zgodności między modelami.
+
+```{r}
+cor(data_hotdeck$WartoscKrupiera, data_knn$WartoscKrupiera)
+cor(data_hotdeck$WartoscKrupiera, data_match$WartoscKrupiera)
+cor(data_match$WartoscKrupiera, data_knn$WartoscKrupiera)
+```
+Ze względu na fakt, że w modelu "Hot Deck" nadal występują braki danych, nie jest możliwe zbadanie jego korelacji z innymi modelami. Natomiast korelacja między modelami KNN i Match wynosi ok. 0.87, co świadczy o wysokiej korelacji. 
+
+#Porównanie zmiennej ilościowej "LiczbaDobrańGracza"
+```{r}
+hist(data_hotdeck$LiczbaDobrańGracza)
+hist(data_knn$LiczbaDobrańGracza)
+hist(data_match$LiczbaDobrańGracza)
+hist(wyniki_gier$LiczbaDobrańGracza)
+```
+Wszystkie wykresy prezentują się dosyć podobnie, w przypadku tej zmiennej.
+
+```{r}
+plot(data_hotdeck$LiczbaDobrańGracza, data_knn$LiczbaDobrańGracza)
+plot(data_hotdeck$LiczbaDobrańGracza, data_match$LiczbaDobrańGracza)
+plot(data_match$LiczbaDobrańGracza, data_knn$LiczbaDobrańGracza)
+```
+Rozproszenia dosyć podobnie się prezentują, delikatnie lepsze dopasowanie prezentują modele "Hot Deck" i "Match".
+
+```{r}
+cor(data_hotdeck$LiczbaDobrańGracza, data_knn$LiczbaDobrańGracza)
+cor(data_hotdeck$LiczbaDobrańGracza, data_match$LiczbaDobrańGracza)
+cor(data_match$LiczbaDobrańGracza, data_knn$LiczbaDobrańGracza)
+```
+Ze względu na fakt, że w modelu "Hot Deck" nadal występują braki danych, nie jest możliwe zbadanie jego korelacji z innymi modelami. Natomiast korelacja między modelami KNN i Match wynosi ok. 0.91, co świadczy o wysokiej korelacji. Wyższa korelacja, prawdopodobnie jest przyczyną mniejszych różnic w wykresach.
+
+
+#Porównanie zmiennej ilościowej "LiczbaDobrańKrupiera"
+```{r}
+hist(data_hotdeck$LiczbaDobrańKrupiera)
+hist(data_knn$LiczbaDobrańKrupiera)
+hist(data_match$LiczbaDobrańKrupiera)
+hist(wyniki_gier$LiczbaDobrańKrupiera)
+```
+Na wykresach ponownie można zauważyć podobieństwa wyników rzeczywistych z modelami "Hot Deck" oraz "Match". W przypadku modelu "KNN" obserwujemy wzrost wartości "4", która jest wartością centralną. 
+
+```{r}
+plot(data_hotdeck$LiczbaDobrańKrupiera, data_knn$LiczbaDobrańKrupiera)
+plot(data_hotdeck$LiczbaDobrańKrupiera, data_match$LiczbaDobrańKrupiera)
+plot(data_match$LiczbaDobrańKrupiera, data_knn$LiczbaDobrańKrupiera)
+```
+
+
+Na podstawie tych wykresów, w zasadzie niemożliwe jest wyciągnięcie jakichkolwiek wniosków.
+
+```{r}
+cor(data_hotdeck$LiczbaDobrańKrupiera, data_knn$LiczbaDobrańKrupiera)
+cor(data_hotdeck$LiczbaDobrańKrupiera, data_match$LiczbaDobrańKrupiera)
+cor(data_match$LiczbaDobrańKrupiera, data_knn$LiczbaDobrańKrupiera)
+```
+Ze względu na fakt, że w modelu "Hot Deck" nadal występują braki danych, nie jest możliwe zbadanie jego korelacji z innymi modelami. Natomiast korelacja między modelami KNN i Match wynosi ok. 0.87, co świadczy o wysokiej korelacji. 
+
+
+*Zmienna - Gra*
+
+Zmienna Gra nie będzie porównywana między modelami, ze względu na fakt iż każdy model przyporządkował ją w sposób losowy. Z tego powodu zostanie ona imputowana przy pomocy liniowej interpolacji.
+
+model <- model %>%
+  mutate(Gra = na.approx(Gra, na.rm = FALSE))
+  
+*RękaGracza i RękaKrupiera*
+Ze względu na charakter zmiennej i dużą liczbę wariantów nie ma sensu porównywać ich między modelami.
+
+### 5. Wybór Najlepszego Modelu
+
+Podsumowanie:
+
+*Hot Deck* - Model Hot Deck charakteryzuje sie najlepszym dopasowaniem, do wyników rzeczywistych, jednak ze względu na jego największą wadę, jaką jest konieczność by zmienna domenowa była bez braków, nie może zostać wybrany do tego zestawu danych.
+
+*KNN* - Pomimo faktu, że wszystkie braki danych zostały zostały imputowane, to uzupełnione wartości odbiegają od wartości rzeczywistych. W modelu KNN występuje tendencja do koncentrowania się na wartościach centralnych (co można zaobserwować w przypadku histogramów zmiennych ilościowych), przez co model nie radzi sobie ze zmiennymi, które nie mają rozkładu normalnego. 
+
+*Match* - Model ten cechuje imputacja zbliżonych wartości do rzeczywistych, niewiele słabsze dopasowanie niż w przypadku modelu "Hot Deck", jednak ze względu na fakt, iż możliwe jest imputowanie wszystkich braków danych jest on najlepszym ze wszystkich modeli.
+
+
+###### OSTATECZNY KOD NAJLEPSZEGO MODELU ######
+
+```{r}
+model <- data_mcar %>%
+  mutate(Gra = na.approx(Gra, na.rm = FALSE))
+
+model <- matchImpute(data = model, variable = 'Gra', match_var= 'WartoscGracza') 
+
+model <- matchImpute(data = model, variable = 'WartoscGracza', match_var='RękaGracza')
+
+model <- matchImpute(data = model, variable = 'WartoscKrupiera', match_var='RękaKrupiera')
+
+model <- matchImpute(data = model, variable = 'RękaGracza', match_var=c('WartoscGracza','LiczbaDobrańGracza'))
+
+model <- matchImpute(data = model, variable = 'RękaKrupiera', match_var=c('WartoscKrupiera','LiczbaDobrańKrupiera'))
+
+model <- matchImpute(data = model, variable = 'LiczbaDobrańGracza', match_var='RękaGracza')
+
+model <- matchImpute(data = model, variable = 'LiczbaDobrańKrupiera', match_var='RękaKrupiera')
+
+model <- matchImpute(data = model, variable = 'Wynik', match_var=c('WartoscKrupiera','WartoscGracza'))
+```
+
+
+
